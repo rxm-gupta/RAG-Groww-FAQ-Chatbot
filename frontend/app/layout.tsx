@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export const metadata: Metadata = {
   title: "Groww Mutual Fund FAQ Assistant",
@@ -15,37 +17,42 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <div className="flex min-h-screen flex-col">
-          <header className="border-b border-gray-200 bg-white">
-            <div className="mx-auto max-w-3xl px-4 py-4">
-              <h1 className="text-xl font-bold text-groww-dark">
-                Groww Mutual Fund FAQ Assistant
-              </h1>
-              <p className="text-sm text-gray-500">
-                Facts-only mutual fund information. No investment advice.
+        <ThemeProvider>
+          <div className="flex min-h-screen flex-col">
+            <header className="border-b border-line bg-surface">
+              <div className="mx-auto max-w-3xl px-4 py-4">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-xl font-bold text-ink">
+                    Groww Mutual Fund FAQ Assistant
+                  </h1>
+                  <ThemeToggle />
+                </div>
+                <p className="text-sm text-muted">
+                  Facts-only mutual fund information. No investment advice.
+                </p>
+              </div>
+            </header>
+
+            <div className="border-b border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <p className="mx-auto max-w-3xl px-4 py-2 text-xs text-amber-900 dark:text-amber-300">
+                ⚠ Do not enter PAN, Aadhaar, OTPs, bank details, folio numbers,
+                phone numbers, or other personal/account information.
               </p>
             </div>
-          </header>
 
-          <div className="bg-amber-50 border-b border-amber-200">
-            <p className="mx-auto max-w-3xl px-4 py-2 text-xs text-amber-900">
-              ⚠ Do not enter PAN, Aadhaar, OTPs, bank details, folio numbers,
-              phone numbers, or other personal/account information.
-            </p>
+            <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
+              {children}
+            </main>
+
+            <footer className="border-t border-line bg-surface">
+              <p className="mx-auto max-w-3xl px-4 py-3 text-[11px] leading-snug text-muted">
+                {DISCLAIMER}
+              </p>
+            </footer>
           </div>
-
-          <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
-            {children}
-          </main>
-
-          <footer className="border-t border-gray-200 bg-white">
-            <p className="mx-auto max-w-3xl px-4 py-3 text-[11px] leading-snug text-gray-400">
-              {DISCLAIMER}
-            </p>
-          </footer>
-        </div>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -14,16 +14,16 @@ export function AnswerCard({
   refused: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-surface p-4 shadow-sm">
       {refused && (
-        <div className="mb-2 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+        <div className="mb-2 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-400/10 dark:text-amber-300">
           Facts-only assistant
         </div>
       )}
-      <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">{answer}</p>
+      <p className="whitespace-pre-line text-sm leading-relaxed text-ink">{answer}</p>
 
       {source?.url && (
-        <div className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-600">
+        <div className="mt-3 border-t border-line pt-3 text-xs text-muted">
           <span className="font-semibold">Source: </span>
           <a
             href={source.url}
@@ -38,7 +38,7 @@ export function AnswerCard({
       )}
 
       {lastUpdated && (
-        <div className="mt-1 text-xs text-gray-500">{lastUpdated}</div>
+        <div className="mt-1 text-xs text-muted">{lastUpdated}</div>
       )}
     </div>
   );

@@ -150,7 +150,7 @@ python scripts/generate_eval.py          # rebuild datasets from the FAQ workboo
 python evaluation/run_evaluation.py --base-url http://localhost:8000
 ```
 
-Reports retrieval accuracy, citation accuracy, scheme identification, faithfulness length compliance, refusal accuracy, and PII blocking across ~205 golden factual questions and 36 guardrail cases (generated from `HDFC_Mutual_Fund_FAQ.xlsx` plus the spec-mandated cases).
+Reports retrieval accuracy, citation accuracy, scheme identification, faithfulness length compliance, refusal accuracy, and PII blocking.
 
 ---
 
@@ -182,7 +182,6 @@ Secrets live only in platform dashboards — never in git.
 
 - Answers depend on the quality/recency of supplied documents; re-ingest updated factsheets periodically (`document_date` freshness feeds reranking).
 - Rule-based intent classification favors precision over recall; unusual phrasings may route to clarification rather than refusal.
-- Scanned/image-only PDFs yield no text (no OCR).
 - The similarity threshold may need tuning after corpus changes.
 - Grow-specific answers rely on ingested Groww pages; if absent, the assistant says the information wasn't found rather than guessing.
 

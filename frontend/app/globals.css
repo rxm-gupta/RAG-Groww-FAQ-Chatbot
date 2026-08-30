@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --page: 249 250 251;
+  --surface: 255 255 255;
+  --line: 229 231 235;
+  --ink: 17 24 39;
+  --muted: 107 114 128;
+  color-scheme: light;
+}
+
+.dark {
+  --page: 3 7 18;
+  --surface: 17 24 39;
+  --line: 31 41 55;
+  --ink: 243 244 246;
+  --muted: 156 163 175;
+  color-scheme: dark;
+}
+
 body {
-  @apply bg-gray-50 text-gray-900 antialiased;
+  @apply bg-page text-ink antialiased;
 }

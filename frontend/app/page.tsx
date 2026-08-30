@@ -58,14 +58,14 @@ export default function Home() {
   return (
     <div className="flex flex-col gap-4">
       {turns.length === 0 && (
-        <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Try asking</h2>
+        <section className="rounded-lg border border-line bg-surface p-4">
+          <h2 className="mb-2 text-sm font-semibold text-ink">Try asking</h2>
           <div className="flex flex-col gap-2">
             {EXAMPLES.map((ex) => (
               <button
                 key={ex}
                 onClick={() => ask(ex)}
-                className="rounded-md border border-gray-200 px-3 py-2 text-left text-sm text-gray-700 hover:border-groww-green hover:bg-emerald-50"
+                className="rounded-md border border-line px-3 py-2 text-left text-sm text-muted hover:border-groww-green hover:bg-emerald-500/10"
               >
                 {ex}
               </button>
@@ -78,7 +78,7 @@ export default function Home() {
         {turns.map((turn, i) =>
           turn.role === "user" ? (
             <div key={i} className="self-end rounded-lg bg-groww-green/10 px-4 py-2 max-w-[85%]">
-              <p className="text-sm text-gray-800">{turn.text}</p>
+              <p className="text-sm text-ink">{turn.text}</p>
             </div>
           ) : (
             <AnswerCard
@@ -91,12 +91,12 @@ export default function Home() {
           )
         )}
         {loading && (
-          <div className="text-sm text-gray-400 animate-pulse">Looking up official sources…</div>
+          <div className="text-sm text-muted animate-pulse">Looking up official sources…</div>
         )}
       </div>
 
       {error && (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</p>
       )}
 
       <form
@@ -110,7 +110,7 @@ export default function Home() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a factual question about the five HDFC schemes…"
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm shadow-sm outline-none focus:border-groww-green"
+          className="flex-1 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm text-ink shadow-sm outline-none focus:border-groww-green"
           maxLength={1000}
         />
         <button
