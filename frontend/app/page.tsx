@@ -20,19 +20,32 @@ const EXAMPLES = [
   "What is the riskometer for Flexi Cap Fund?",
 ];
 
+// A follow-up question clicked by the user stays out of the suggestions until
+// this many further answers have been given.
+const FOLLOW_UP_COOLDOWN_ANSWERS = 5;
+
+interface FollowUpLogEntry {
+  q: string;
+  answersAfter: number;
+}
+
 export default function Home() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId] = useState(() => crypto.randomUUID());
+  const [followUpLog, setFollowUpLog] = useState<FollowUpLogEntry[]>([]);
 
-  async function ask(question: string) {
+  async function ask(question: string, viaFollowUp = false) {
     const q = question.trim();
     if (!q || loading) return;
 
     setError(null);
     setTurns((t) => [...t, { role: "user", text: q }]);
+    if (viaFollowUp) {
+      setFollowUpLog((l) => [...l, { q, answersAfter: 0 }]);
+    }
     setInput("");
     setLoading(true);
 
@@ -44,6 +57,7 @@ export default function Home() {
           text: "Please do not share personal or account information (PAN, Aadhaar, OTPs, bank details, folio numbers). You can ask general factual questions about the HDFC Mutual Fund schemes.",
         },
       ]);
+      setFollowUpLog((l) => l.map((e) => ({ ...e, answersAfter: e.answersAfter + 1 })));
       setLoading(false);
       return;
     }
@@ -51,6 +65,7 @@ export default function Home() {
     try {
       const resp = await askQuestion(q, sessionId);
       setTurns((t) => [...t, { role: "assistant", text: resp.answer, response: resp }]);
+      setFollowUpLog((l) => l.map((e) => ({ ...e, answersAfter: e.answersAfter + 1 })));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
@@ -61,9 +76,13 @@ export default function Home() {
   const lastAnswered = [...turns].reverse().find(
     (t) => t.role === "assistant" && t.response
   );
+  const recentlyAsked = followUpLog
+    .filter((e) => e.answersAfter < FOLLOW_UP_COOLDOWN_ANSWERS)
+    .map((e) => e.q);
   const followUps = getFollowUps(
     lastAnswered?.response?.scheme ?? null,
-    lastAnswered?.response?.topic ?? null
+    lastAnswered?.response?.topic ?? null,
+    recentlyAsked
   );
 
   return (
@@ -108,7 +127,9 @@ export default function Home() {
         )}
       </div>
 
-      {lastAnswered && <FollowUpSuggestions questions={followUps} onAsk={ask} />}
+      {lastAnswered && followUps.length > 0 && (
+        <FollowUpSuggestions questions={followUps} onAsk={(q) => ask(q, true)} />
+      )}
 
       {error && (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</p>

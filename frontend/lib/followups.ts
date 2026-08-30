@@ -162,11 +162,16 @@ export const GENERAL_FALLBACKS = [
   "What is the difference between the Growth option and the IDCW option?",
 ];
 
-export function getFollowUps(scheme: string | null, excludeTopic: string | null): string[] {
+export function getFollowUps(
+  scheme: string | null,
+  excludeTopic: string | null,
+  recentlyAsked: readonly string[] = []
+): string[] {
+  const asked = new Set(recentlyAsked);
   const entry = scheme ? SCHEMES[scheme] : undefined;
-  if (!entry) return GENERAL_FALLBACKS;
+  if (!entry) return GENERAL_FALLBACKS.filter((q) => !asked.has(q));
   return entry.topics
-    .filter((t) => !excludeTopic || t.topic !== excludeTopic)
+    .filter((t) => (!excludeTopic || t.topic !== excludeTopic) && !asked.has(t.question))
     .slice(0, 3)
     .map((t) => t.question);
 }
