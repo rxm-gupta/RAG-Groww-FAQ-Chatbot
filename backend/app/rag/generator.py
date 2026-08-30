@@ -34,6 +34,7 @@ _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 _NO_EVIDENCE_RE = re.compile(
     r"could(?:n'?t| not) (?:be )?(?:found|determined)|"
     r"not (?:available|contained|mentioned|provided|disclosed|specified|stated) in|"
+    r"do(?:es)? not (?:specify|state|mention|include)|"
     r"isn'?t available in|no (?:information|evidence|details)|"
     r"information you'?re looking for",
     re.IGNORECASE,

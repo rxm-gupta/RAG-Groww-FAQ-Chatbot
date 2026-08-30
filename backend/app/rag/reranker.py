@@ -20,6 +20,16 @@ INTENT_SOURCE_PRIORITY: dict[str, dict[str, list[str]]] = {
 }
 DEFAULT_PRIORITY = {"organizations": [], "doc_types": []}
 
+# Topics the chunk tagger assigns interchangeably to the same document tables:
+# a "minimum SIP amount" question extracts as minimum_investment, but the
+# answer chunk is usually tagged sip (or purchase for lump-sum minimums).
+# Without this map such chunks score topic 0.2 and drop out of final_top_k.
+TOPIC_RELATIVES: dict[str, set[str]] = {
+    "minimum_investment": {"sip", "purchase"},
+    "sip": {"minimum_investment", "purchase"},
+    "purchase": {"minimum_investment", "sip"},
+}
+
 ORG_RANK = {  # generic fallback ordering
     "HDFC Mutual Fund": 0.9,
     "SEBI": 0.8,
@@ -96,7 +106,10 @@ def rerank(
         scheme_score = 1.0 if query_scheme and chunk_scheme == query_scheme else (
             -0.5 if query_scheme and chunk_scheme and chunk_scheme != query_scheme else 0.3
         )
-        topic_score = 1.0 if query_topic and chunk_topic == query_topic else 0.2
+        related = TOPIC_RELATIVES.get(query_topic or "", set())
+        topic_score = 1.0 if query_topic and chunk_topic == query_topic else (
+            0.8 if query_topic and chunk_topic in related else 0.2
+        )
 
         org = h.get("organization") or meta.get("organization") or ""
         doc_type = h.get("document_type") or meta.get("document_type") or ""

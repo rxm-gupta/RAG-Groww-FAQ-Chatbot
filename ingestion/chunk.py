@@ -123,6 +123,11 @@ def classify_topic(text: str, section_hint: str = "") -> str:
     # than the minimum-investment keywords, so keyword voting mislabels them
     if "minimum application amount" in hay:
         best_topic = "minimum_investment"
+    elif "minimum amount" in hay and re.search(r"\bsip\b", hay):
+        # "SIP SWP & STP Details: Minimum amount" table rows carry the actual
+        # SIP minimums; keyword voting tags them "sip" because SIP tokens
+        # outnumber the one "minimum amount" mention
+        best_topic = "minimum_investment"
     return best_topic
 
 

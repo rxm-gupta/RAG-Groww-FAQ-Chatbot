@@ -78,6 +78,18 @@ def test_topic_classification():
     assert classify_topic(text2, "TER") == "expense_ratio"
 
 
+def test_topic_classification_sip_minimum_amount_row():
+    # scheme-summary "SIP SWP & STP Details: Minimum amount" rows carry the
+    # actual SIP minimums; SIP tokens must not steal the topic from
+    # minimum_investment
+    text = (
+        "SIP SWP & STP Details: Minimum amount of HDFC Flexi Cap Fund: "
+        "For SIP DSIP, WSIP, MSIP - Rs. 100; QSIP - Rs. 1500; HSIP - Rs. 2500; "
+        "YSIP - Rs. 5000. For SWAP Fixed SWAP - Rs. 100; Variable SWAP - Rs. 300."
+    )
+    assert classify_topic(text, "SIP SWP & STP Details: Minimum amount") == "minimum_investment"
+
+
 def test_chunk_sid_document():
     sid = DOCS / "SID - HDFC Small Cap Fund dated November 21 2025_0.pdf"
     if not sid.exists():
