@@ -1,0 +1,32 @@
+# Render blueprint — deploy the FastAPI backend.
+# Deploy: Render Dashboard -> New -> Blueprint -> point at this repo.
+services:
+  - type: web
+    name: groww-mf-faq-api
+    runtime: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GROQ_FALLBACK_MODEL
+        value: openai/gpt-oss-20b
+      - key: HF_API_KEY
+        sync: false
+      - key: MIN_SIMILARITY_SCORE
+        value: "0.35"
+      - key: CORS_ORIGINS
+        sync: false # set to your Vercel URL, e.g. https://your-app.vercel.app
+      - key: CHAT_RATE_LIMIT
+        value: 30/minute

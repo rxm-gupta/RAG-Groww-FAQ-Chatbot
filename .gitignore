@@ -1,0 +1,34 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Source documents (knowledge base; kept out of git — lives locally / in Supabase)
+HDFC MF PDFs/
+
+# Data (large binaries; keep manifest, not the copies)
+data/documents/*
+!data/documents/.gitkeep
+
+# Logs
+*.log
+
+# Agent session artifacts
+.kilo/

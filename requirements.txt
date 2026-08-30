@@ -1,0 +1,20 @@
+# Backend + ingestion
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+httpx>=0.27
+supabase>=2.5
+slowapi>=0.1.9
+python-dotenv>=1.0
+
+# Document processing
+pdfplumber>=0.11
+pypdf>=4.2
+openpyxl>=3.1
+
+# Testing / evaluation
+pytest>=8.2
+requests>=2.32
+
+# Local embedding fallback lives in requirements-local.txt (heavy: pulls torch).

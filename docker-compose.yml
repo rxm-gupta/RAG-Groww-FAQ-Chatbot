@@ -1,0 +1,30 @@
+# Local development helper: backend API only.
+# The database is Supabase (external); the frontend runs with `npm run dev`.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - CORS_ORIGINS=http://localhost:3000
+    restart: unless-stopped
+
+  # Optional local Postgres+pgvector for offline development.
+  # Production uses Supabase; apply supabase/migrations/001_init.sql there.
+  db-dev:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mf_faq
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    profiles: ["dev-db"]
+
+volumes:
+  pgdata:
