@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { AnswerCard } from "@/components/AnswerCard";
+import { FollowUpSuggestions } from "@/components/FollowUpSuggestions";
+import { SchemeScope } from "@/components/SchemeScope";
 import { askQuestion, containsObviousPii } from "@/lib/api";
+import { getFollowUps } from "@/lib/followups";
 import type { ChatResponse } from "@/types";
 
 interface Turn {
@@ -55,8 +58,18 @@ export default function Home() {
     }
   }
 
+  const lastAnswered = [...turns].reverse().find(
+    (t) => t.role === "assistant" && t.response
+  );
+  const followUps = getFollowUps(
+    lastAnswered?.response?.scheme ?? null,
+    lastAnswered?.response?.topic ?? null
+  );
+
   return (
     <div className="flex flex-col gap-4">
+      <SchemeScope />
+
       {turns.length === 0 && (
         <section className="rounded-lg border border-line bg-surface p-4">
           <h2 className="mb-2 text-sm font-semibold text-ink">Try asking</h2>
@@ -94,6 +107,8 @@ export default function Home() {
           <div className="text-sm text-muted animate-pulse">Looking up official sources…</div>
         )}
       </div>
+
+      {lastAnswered && <FollowUpSuggestions questions={followUps} onAsk={ask} />}
 
       {error && (
         <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">{error}</p>
