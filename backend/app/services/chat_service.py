@@ -146,8 +146,12 @@ def handle_chat(question_raw: str, session_id: str | None) -> ChatResponse:
     intent_result = classify_intent(question_norm, pii)
 
     # conversation-memory carry-over for follow-ups ("What about the exit load?")
+    # Only for scheme-specific intents: operational how-tos ("how do I download
+    # a capital-gains statement?") are scheme-agnostic processes, and injecting
+    # a remembered scheme there pollutes retrieval and triggers the
+    # wrong-scheme guard against neutral sources (blogs, SEBI/AMFI docs).
     sess = _get_session(session_id)
-    if intent_result.intent in ("FACTUAL_SCHEME", "FACTUAL_OPERATIONAL", "AMBIGUOUS") and not intent_result.scheme:
+    if intent_result.intent in ("FACTUAL_SCHEME", "AMBIGUOUS") and not intent_result.scheme:
         if sess.scheme:
             intent_result.scheme = sess.scheme
 
@@ -232,11 +236,15 @@ def handle_chat(question_raw: str, session_id: str | None) -> ChatResponse:
             refusal_type="NO_EVIDENCE",
         )
 
-    # wrong-scheme guard: if the user asked about a specific scheme, evidence must match it
+    # wrong-scheme guard: if the user asked about a specific scheme, evidence
+    # must match it OR be scheme-neutral (scheme=None: blogs, SEBI/AMFI docs,
+    # process guides). Neutral sources can never leak another scheme's data,
+    # so they complement matching evidence instead of being discarded.
     if intent_result.scheme:
-        matching = [h for h in ranked[: settings.final_top_k]
-                    if (h.get("scheme") or "") == intent_result.scheme]
-        if not matching:
+        top_slice = ranked[: settings.final_top_k]
+        matching = [h for h in top_slice if (h.get("scheme") or "") == intent_result.scheme]
+        neutral = [h for h in top_slice if not (h.get("scheme") or "")]
+        if not matching and not neutral:
             return ChatResponse(
                 answer=M.NOT_FOUND_MSG,
                 intent=intent_result.intent,
@@ -247,7 +255,7 @@ def handle_chat(question_raw: str, session_id: str | None) -> ChatResponse:
                 refused=False,
                 refusal_type="SCHEME_MISMATCH",
             )
-        evidence = matching
+        evidence = matching + neutral
     else:
         evidence = ranked[: settings.final_top_k]
 

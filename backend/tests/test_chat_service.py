@@ -127,3 +127,102 @@ def test_no_evidence_patterns():
     assert looks_like_no_evidence("Exit load is not disclosed in this factsheet.")
     assert not looks_like_no_evidence("The exit load is 1% if redeemed within one year.")
     assert not looks_like_no_evidence("The minimum lump-sum investment is Rs 5,000.")
+
+
+# ---------------------------------------------------------------------------
+# Scheme memory + wrong-scheme guard regression tests
+# ---------------------------------------------------------------------------
+
+def _clear_sessions():
+    chat_service._sessions.clear()
+
+
+def test_operational_question_ignores_session_scheme(monkeypatch):
+    """A remembered scheme must not leak into operational how-to questions:
+    retrieval must run scheme-free so neutral sources can be used."""
+    _clear_sessions()
+    captured = {}
+
+    def fake_retrieve(client, question, scheme=None, topic=None, top_k=None):
+        captured["scheme"] = scheme
+        return [_hit()]
+
+    monkeypatch.setattr(chat_service, "retrieve", fake_retrieve)
+    monkeypatch.setattr(chat_service, "rerank", lambda hits, *a, **k: hits)
+    monkeypatch.setattr(
+        chat_service, "generate_answer_with_fallback", lambda evidence, q: ("ok", "test-model")
+    )
+    import backend.app.rag.retriever as retriever
+
+    monkeypatch.setattr(retriever, "get_client", lambda: object())
+
+    handle_chat("What is the minimum SIP for a Flexi Cap fund?", "sess-op")
+    resp = handle_chat("How can I download my capital-gains statement?", "sess-op")
+    assert captured["scheme"] is None
+    assert not resp.refused
+
+
+def test_ambiguous_followup_still_uses_session_scheme(monkeypatch):
+    """Follow-ups like 'What about the exit load?' must keep memory carry-over."""
+    _clear_sessions()
+    captured = {}
+
+    def fake_retrieve(client, question, scheme=None, topic=None, top_k=None):
+        captured["scheme"] = scheme
+        return [_hit(scheme="HDFC FlexiCap Fund")]
+
+    monkeypatch.setattr(chat_service, "retrieve", fake_retrieve)
+    monkeypatch.setattr(chat_service, "rerank", lambda hits, *a, **k: hits)
+    monkeypatch.setattr(
+        chat_service, "generate_answer_with_fallback", lambda evidence, q: ("Exit load is 1%.", "test-model")
+    )
+    import backend.app.rag.retriever as retriever
+
+    monkeypatch.setattr(retriever, "get_client", lambda: object())
+
+    handle_chat("What is the minimum SIP for a Flexi Cap fund?", "sess-am")
+    resp = handle_chat("What about the exit load?", "sess-am")
+    assert captured["scheme"] == "HDFC FlexiCap Fund"
+    assert not resp.refused
+
+
+def test_guard_allows_matching_plus_neutral_evidence(monkeypatch):
+    """A scheme question answered by matching scheme chunks + neutral (scheme=None)
+    sources must go through — neutral sources are not wrong-scheme evidence."""
+    _clear_sessions()
+    _patch_pipeline(
+        monkeypatch,
+        [_hit(scheme="HDFC FlexiCap Fund"), _hit(scheme=None, sim=0.6)],
+        "You can obtain it via CAS from CAMS or NSDL.",
+    )
+    resp = handle_chat("How to download capital-gains statement for HDFC Flexi Cap Fund?", None)
+    assert not resp.refused
+    assert "CAMS" in resp.answer
+
+
+def test_guard_neutral_only_still_answers(monkeypatch):
+    """Only neutral (scheme=None) evidence: answer from it — the LLM remains
+    responsible for refusing scheme-specific facts absent from the context."""
+    _clear_sessions()
+    _patch_pipeline(
+        monkeypatch,
+        [_hit(scheme=None, sim=0.6)],
+        "You can obtain a capital-gains statement via CAS from CAMS or NSDL.",
+    )
+    resp = handle_chat("How to download capital-gains statement for HDFC Flexi Cap Fund?", None)
+    assert not resp.refused
+    assert "CAMS" in resp.answer
+
+
+def test_guard_still_refuses_only_wrong_scheme(monkeypatch):
+    """All top evidence from a different scheme must still refuse (SCHEME_MISMATCH)."""
+    _clear_sessions()
+    _patch_pipeline(
+        monkeypatch,
+        [_hit(scheme="HDFC Small Cap Fund", sim=0.6)],
+        "unused",
+    )
+    resp = handle_chat("What is the exit load of HDFC FlexiCap Fund?", None)
+    assert not resp.refused
+    assert resp.refusal_type == "SCHEME_MISMATCH"
+    assert resp.answer == NOT_FOUND_MSG

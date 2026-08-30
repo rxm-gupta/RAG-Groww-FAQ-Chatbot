@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +20,91 @@ class RawPage:
     meta: dict = field(default_factory=dict)
 
 
+def _text_outside_tables(page, tables) -> str:
+    """Plain text of a page excluding words that sit inside detected table cells.
+
+    pdfplumber's extract_text() reads table cells in visual order, which
+    interleaves multi-line rows across columns and scrambles label/value pairs
+    (e.g. '49 | Minimum amount | Rs. 300' becomes 'Minimum 49 - Rs. 300.').
+    Since detected tables are already emitted as clean '|'-joined rows, the
+    plain-text part only needs the content OUTSIDE the table cells.
+    `tables` are pdfplumber Table objects (duck-typed: need .cells).
+    """
+    try:
+        cell_boxes = [tuple(c) for t in tables for c in (getattr(t, "cells", None) or [])]
+    except Exception:  # noqa: BLE001
+        return page.extract_text() or ""
+    if not cell_boxes:
+        return page.extract_text() or ""
+
+    words = page.extract_words()
+    outside = []
+    for w in words:
+        cx = (w["x0"] + w["x1"]) / 2
+        cy = (w["top"] + w["bottom"]) / 2
+        if any(bx0 <= cx <= bx1 and btop <= cy <= bbottom for bx0, btop, bx1, bbottom in cell_boxes):
+            continue
+        outside.append(w)
+    if not outside:
+        return ""
+
+    # reassemble reading order: group words into lines by vertical position
+    lines: dict[int, list] = {}
+    for w in outside:
+        lines.setdefault(round(w["top"] / 3), []).append(w)
+    return "\n".join(
+        " ".join(word["text"] for word in sorted(ws, key=lambda w: w["x0"]))
+        for _, ws in sorted(lines.items())
+    )
+
+
+def _scheme_summary_facts(rows: list[list[str]]) -> str | None:
+    """Render a 'SCHEME SUMMARY DOCUMENT' table as natural-language facts.
+
+    Pipe-joined table rows embed poorly against natural questions ("what is
+    the minimum SIP for Flexi Cap"), so — like the TER collapse below — we
+    additionally emit one 'label of <fund>: value.' sentence per row. Rows
+    look like [<row number>, <label>, <value>]; multi-line values are joined.
+    """
+    def _row_text(r: list[str]) -> str:
+        return " ".join((c or "") for c in r).upper()
+
+    if not rows or not any("SCHEME SUMMARY DOCUMENT" in _row_text(r) for r in rows[:3]):
+        return None
+
+    fund = ""
+    for r in rows:
+        cells = [(c or "").replace("\n", " ").strip() for c in r]
+        cells = [c for c in cells if c]
+        if any(c.lower().startswith("fund name") for c in cells):
+            idx = next(i for i, c in enumerate(cells) if c.lower().startswith("fund name"))
+            if idx + 1 < len(cells):
+                fund = cells[idx + 1]
+            break
+    if not fund:
+        return None
+
+    facts: list[str] = []
+    for r in rows:
+        cells = [(c or "").replace("\n", " ").strip() for c in r]
+        cells = [c for c in cells if c]
+        if len(cells) < 2:
+            continue
+        if any("SCHEME SUMMARY DOCUMENT" in c.upper() for c in cells):
+            continue
+        if len(cells) >= 3 and re.fullmatch(r"\d{1,3}", cells[0]):
+            label, value = cells[1], " ".join(cells[2:])
+        else:
+            label, value = cells[0], " ".join(cells[1:])
+        if not label or not value:
+            continue
+        facts.append(f"{label} of {fund}: {value}")
+    if not facts:
+        return None
+    header = f"Scheme Summary Document - {fund}"
+    return "\n".join([header] + facts)
+
+
 def extract_pdf(path: Path) -> list[RawPage]:
     pages: list[RawPage] = []
     try:
@@ -26,10 +112,24 @@ def extract_pdf(path: Path) -> list[RawPage]:
 
         with pdfplumber.open(str(path)) as pdf:
             for i, p in enumerate(pdf.pages, start=1):
-                text = p.extract_text() or ""
-                tables = p.extract_tables()
+                try:
+                    found = p.find_tables()
+                except Exception:  # noqa: BLE001
+                    found = []
+                tables = []
+                for t in found:
+                    try:
+                        extracted = t.extract()
+                    except Exception:  # noqa: BLE001
+                        extracted = None
+                    if extracted:
+                        tables.append(extracted)
+                if found:
+                    text = _text_outside_tables(p, found)
+                else:
+                    text = p.extract_text() or ""
                 parts = [text.strip()] if text.strip() else []
-                for t in tables or []:
+                for t in tables:
                     rows = []
                     for row in t:
                         cells = [(c or "").replace("\n", " ").strip() for c in row]
@@ -37,6 +137,10 @@ def extract_pdf(path: Path) -> list[RawPage]:
                             rows.append(" | ".join(cells))
                     if rows:
                         parts.append("\n".join(rows))
+                    raw_cells = [[(c or "").replace("\n", " ").strip() for c in row] for row in t]
+                    facts = _scheme_summary_facts(raw_cells)
+                    if facts:
+                        parts.append(facts)
                 if parts:
                     pages.append(
                         RawPage(page=i, label="page", text="\n\n".join(parts), is_table=bool(tables))

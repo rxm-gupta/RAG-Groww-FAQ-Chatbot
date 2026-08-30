@@ -5,8 +5,63 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ingestion.chunk import classify_topic, chunk_document, looks_like_heading
+from ingestion.extract import _text_outside_tables, extract_pdf
 
 DOCS = Path(__file__).resolve().parents[3] / "data" / "documents"
+
+
+class _FakePage:
+    """Minimal pdfplumber-page stand-in for _text_outside_tables tests."""
+
+    def __init__(self, words, cell_boxes):
+        self._words = words
+        self.cells = cell_boxes
+
+    def extract_words(self):
+        return self._words
+
+    def extract_text(self):
+        return " ".join(w["text"] for w in self._words)
+
+
+def test_text_outside_tables_excludes_cell_words():
+    page = _FakePage(
+        words=[
+            {"text": "Header", "x0": 10, "x1": 50, "top": 10, "bottom": 20},
+            {"text": "Minimum", "x0": 10, "x1": 60, "top": 100, "bottom": 110},
+            {"text": "amount", "x0": 65, "x1": 115, "top": 100, "bottom": 110},
+            {"text": "Rs.", "x0": 400, "x1": 420, "top": 100, "bottom": 110},
+            {"text": "300", "x0": 425, "x1": 450, "top": 100, "bottom": 110},
+        ],
+        cell_boxes=[(5, 95, 500, 115)],
+    )
+    out = _text_outside_tables(page, [type("T", (), {"cells": page.cells})()])
+    assert out == "Header"
+
+
+def test_text_outside_tables_no_tables_returns_full_text():
+    page = _FakePage(
+        words=[
+            {"text": "Plain", "x0": 10, "x1": 40, "top": 10, "bottom": 20},
+            {"text": "text", "x0": 45, "x1": 70, "top": 10, "bottom": 20},
+        ],
+        cell_boxes=[],
+    )
+    assert _text_outside_tables(page, []) == "Plain text"
+
+
+def test_scheme_summary_pdf_has_clean_minimum_rows():
+    """Regression: the scheme-summary table must not produce garbled text
+    like 'Minimum 49 - Rs. 300' where the row label/value pairing is lost."""
+    summary = next(iter(DOCS.glob("HDFCEQ_*.pdf")), None)
+    if not summary:
+        print("scheme summary PDF missing; skipping")
+        return
+    pages = extract_pdf(summary)
+    page1 = pages[0].text
+    assert "Minimum 49 - Rs. 300" not in page1
+    assert "SIP SWP & STP Details: Minimum amount" in page1
+    assert "Minimum Application Amount | Rs.100" in page1
 
 
 def test_heading_detection():
