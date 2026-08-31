@@ -40,9 +40,15 @@ app.add_middleware(
 app.include_router(router)
 
 
-@app.route("/ping", methods=["GET", "HEAD"])
-async def ping(request=None):
+# 1. This handles standard browser visits (GET requests)
+@app.get("/ping")
+async def ping_get():
     return {"status": "ok"}
+
+# 2. This handles UptimeRobot checks perfectly (HEAD requests)
+@app.head("/ping")
+async def ping_head():
+    return None  # HEAD requests are not allowed to return a response body
 
 
 
