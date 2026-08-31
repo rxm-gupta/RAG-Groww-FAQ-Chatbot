@@ -39,9 +39,11 @@ app.add_middleware(
 
 app.include_router(router)
 
-@app.get("/ping")
-async def ping():
+
+@app.route("/ping", methods=["GET", "HEAD"])
+async def ping(request=None):
     return {"status": "ok"}
+
 
 
 @app.get("/")
