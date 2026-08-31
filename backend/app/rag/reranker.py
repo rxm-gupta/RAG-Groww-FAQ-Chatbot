@@ -43,6 +43,7 @@ WEIGHTS = {
     "topic": 0.14,
     "source": 0.08,
     "freshness": 0.05,
+    "overlap": 0.10,
 }
 
 
@@ -59,6 +60,33 @@ def _freshness(document_date: str | None) -> float:
 
 def _token_set(text: str) -> set[str]:
     return {t for t in text.lower().split() if len(t) > 2}
+
+
+# Pure function words carry no retrieval signal and would inflate the overlap
+# of every chunk equally.
+_QUERY_STOPWORDS = {
+    "what", "which", "who", "whose", "when", "where", "why", "how",
+    "is", "are", "was", "were", "the", "for", "and", "with", "does", "do",
+    "did", "can", "could", "will", "would", "this", "that", "these", "those",
+    "its", "it", "their", "there", "about", "into", "from",
+}
+
+
+def _query_overlap(question: str, chunk_text: str) -> float:
+    """Share of the question's content words that appear in the chunk.
+    Catches the case where a chunk is semantically adjacent but lexically
+    exact (e.g. a 'minimum SIP amount' question vs the table row that says
+    'Minimum amount ... For SIP')."""
+    q_tokens = {
+        t.replace("-", " ")
+        for t in question.lower().split()
+        if len(t) > 2 and t not in _QUERY_STOPWORDS
+    }
+    q_tokens = {t for tok in q_tokens for t in tok.split()}
+    if not q_tokens:
+        return 0.0
+    c_tokens = _token_set(chunk_text)
+    return len(q_tokens & c_tokens) / len(q_tokens)
 
 
 def _demote_near_duplicates(ranked: list[dict]) -> None:
@@ -94,6 +122,7 @@ def rerank(
     query_scheme: str | None,
     query_topic: str | None,
     intent: str | None,
+    question: str | None = None,
 ) -> list[dict]:
     priority = INTENT_SOURCE_PRIORITY.get(intent or "", DEFAULT_PRIORITY)
 
@@ -130,6 +159,7 @@ def rerank(
             + WEIGHTS["topic"] * topic_score
             + WEIGHTS["source"] * min(source_score, 1.25) / 1.25
             + WEIGHTS["freshness"] * fresh
+            + WEIGHTS["overlap"] * _query_overlap(question or "", h.get("chunk_text") or "")
         )
         h["rerank_score"] = round(score, 4)
         # stash display metadata for the citation builder

@@ -66,7 +66,8 @@ def search(req: SearchRequest):
     except RetrievalError:
         raise HTTPException(status_code=503, detail=M.DB_ERROR_MSG)
     ranked = rerank(hits, req.scheme or intent_result.scheme,
-                    req.topic or intent_result.topic, intent_result.intent)
+                    req.topic or intent_result.topic, intent_result.intent,
+                    req.query)
     out = []
     for h in ranked[: req.top_k]:
         meta = h.get("metadata") or {}

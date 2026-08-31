@@ -206,7 +206,7 @@ def handle_chat(question_raw: str, session_id: str | None) -> ChatResponse:
             raise ServiceError(M.DB_ERROR_MSG)
         raise ServiceError(M.GEN_ERROR_MSG)
 
-    ranked = rerank(hits, intent_result.scheme, intent_result.topic, intent_result.intent)
+    ranked = rerank(hits, intent_result.scheme, intent_result.topic, intent_result.intent, question_norm)
 
     ambiguous_try = intent_result.intent == "AMBIGUOUS" and not intent_result.scheme
     ambiguous_not_found = f"{M.AMBIGUOUS_NOT_FOUND_MSG}\n\n{build_scheme_suggestions(intent_result.topic)}"

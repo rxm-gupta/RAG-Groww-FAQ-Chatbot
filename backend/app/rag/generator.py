@@ -33,6 +33,7 @@ Return only the factual answer text. Do not generate a source URL."""
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 _NO_EVIDENCE_RE = re.compile(
     r"could(?:n'?t| not) (?:be )?(?:found|determined)|"
+    r"could(?:n'?t| not) (?:find|locate)|"
     r"not (?:available|contained|mentioned|provided|disclosed|specified|stated) in|"
     r"do(?:es)? not (?:specify|state|mention|include)|"
     r"isn'?t available in|no (?:information|evidence|details)|"
@@ -61,7 +62,8 @@ def _call_groq(model: str, context: str, question: str, timeout: float) -> str:
     payload = {
         "model": model,
         "temperature": 0,
-        "max_tokens": 300,
+        "max_tokens": 600,
+        "reasoning_effort": "low",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"CONTEXT:\n{context}\n\nUSER QUESTION:\n{question}"},
