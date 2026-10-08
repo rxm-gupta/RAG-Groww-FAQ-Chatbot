@@ -1,6 +1,6 @@
 # Groww Mutual Fund FAQ Assistant
 
-A **facts-only** mutual-fund FAQ chatbot for retail users. It answers factual questions about five HDFC Mutual Fund schemes, mutual-fund operations, regulatory topics, and Groww's public mutual-fund processes — using **only** retrieved evidence from official documents (SID / KIM / Fund Facts / SEBI / AMFI / spreadsheets) stored in Supabase with pgvector.
+A **facts-only** mutual-fund FAQ chatbot for retail users. It answers factual questions about five HDFC Mutual Fund schemes, mutual-fund operations, regulatory topics, and Groww's public mutual-fund processes using only retrieved evidence from official documents (SID, KIM, Fund Facts, SEBI, AMFI, and spreadsheets) stored in Supabase with pgvector.
 
 > **It does not provide investment advice.** Advice, performance predictions, fund comparisons/rankings, market-timing suggestions, and account/PII requests are detected and refused before retrieval.
 
@@ -16,10 +16,11 @@ A **facts-only** mutual-fund FAQ chatbot for retail users. It answers factual qu
 
 ## Architecture
 
-```
+```text
 User question
    ↓
-[FastAPI] PII detection            ← BEFORE any external call; raw PII never logged/stored
+[FastAPI] PII detection
+   ← BEFORE external calls; raw PII is never logged or stored
    ↓
 Intent classification (12 intents, rule-based)
    ↓
@@ -27,7 +28,7 @@ Scheme extraction (+ conversation memory for follow-ups)
    ↓
 Topic extraction + query normalization
    ↓
-Embedding: all-MiniLM-L6-v2 via HF Inference API (online only)
+Local embedding: all-MiniLM-L6-v2 (384 dimensions)
    ↓
 Supabase pgvector search (metadata-filtered RPC match_chunks)
    ↓
@@ -41,11 +42,11 @@ App-controlled citation (exactly ONE source link from chunk metadata)
    + "Last updated from sources"
 ```
 
-- **Frontend**: Next.js 14 + TypeScript + Tailwind CSS → Vercel
-- **Backend**: FastAPI (Python) → Render / Railway / Fly.io (`render.yaml` included)
-- **Database**: Supabase PostgreSQL + pgvector (HNSW index)
-- **Embeddings**: Hugging Face Inference API — all-MiniLM-L6-v2 *online only*, no local models
-- **Generation**: Groq (`GROQ_MODEL`, default `OpenAI GPT-OSS 120B`; configurable fallback)
+- **Frontend:** Next.js 14 + TypeScript + Tailwind CSS → Vercel
+- **Backend:** FastAPI (Python) → Render / Railway / Fly.io (`render.yaml` included)
+- **Database:** Supabase PostgreSQL + pgvector
+- **Embeddings:** Local `sentence-transformers/all-MiniLM-L6-v2` model (384 dimensions); no Hugging Face Inference API token is required
+- **Generation:** Groq (`GROQ_MODEL`, default `openai/gpt-oss-120b`; configurable fallback)
 
 ### Safety guarantees
 
@@ -53,33 +54,32 @@ App-controlled citation (exactly ONE source link from chunk metadata)
 |---|---|
 | No investment advice | `ADVICE` intent → polite refusal before retrieval |
 | No predictions/comparisons/market timing | Dedicated refusal intents |
-| PII never leaves the app | PAN/Aadhaar/folio/bank/OTP/phone/email/credential regex scan runs **first**; blocked requests are never embedded, stored, or sent to Supabase/Groq |
+| PII never leaves the app | PAN/Aadhaar/folio/bank/OTP/phone/email/credential scan runs first; blocked requests are never embedded, stored, or sent to Supabase/Groq |
 | No hallucinated citations | LLM output is URL-stripped; the single citation comes only from chunk metadata |
 | No weak-evidence answers | Configurable similarity threshold + wrong-scheme guard |
 | Ambiguous questions clarify | "Which HDFC Mutual Fund scheme would you like to know about?" |
-| Historical performance | Reported as fact **only** when present in a retrieved official source, never ranked/extrapolated |
+| Historical performance | Reported as fact only when present in a retrieved official source, never ranked or extrapolated |
 
 ---
 
 ## Project structure
 
-```
+```text
 frontend/                 Next.js chat UI (Vercel)
 backend/app/
   main.py                 FastAPI entrypoint (CORS, rate limiting)
-  config.py               pydantic-settings, all env-driven
+  config.py               pydantic-settings, environment-driven config
   api/routes.py           /health /chat /search /ingest /sources/{id} /schemes /topics
   services/chat_service.py pipeline orchestration + conversation memory + citations
-  rag/                    embeddings, retriever, reranker, Groq generator
-  safety/                 pii.py, intent.py, messages.py (refusal wording lives here)
-ingestion/                extract → clean → chunk → embed → ingest (one command)
+  rag/                    local embeddings, retriever, reranker, Groq generator
+  safety/                 pii.py, intent.py, messages.py
+ingestion/                extract → clean → chunk → embed → ingest
 evaluation/               golden_questions.json, guardrail_tests.json, run_evaluation.py
 scripts/                  bootstrap_manifest.py, fetch_groww_help.py,
                           generate_eval.py, smoke_final.py
-supabase/migrations/      001_init.sql (tables, HNSW index, match_chunks RPC),
-                          002_exact_knn.sql (exact KNN match_chunks)
-data/documents/           official documents (copied here by the bootstrap script)
-data/manifest.csv         document metadata incl. official source URLs
+supabase/migrations/      001_init.sql, 002_exact_knn.sql
+data/documents/           official documents copied here by the bootstrap script
+data/manifest.csv         document metadata including official source URLs
 ```
 
 ---
@@ -87,103 +87,163 @@ data/manifest.csv         document metadata incl. official source URLs
 ## Setup
 
 ### Prerequisites
-- Python 3.11+ and Node.js 18+
-- A [Supabase](https://supabase.com) project (pgvector enabled)
-- A [Groq](https://console.groq.com) API key
-- A [Hugging Face](https://huggingface.co/settings/tokens) token with Inference API access
 
-### 1. Clone & environment
+- Python 3.11+ and Node.js 18+
+- A [Supabase](https://supabase.com/) project with pgvector enabled
+- A [Groq](https://console.groq.com/) API key
+- Internet access on first model load so `sentence-transformers` can download the public model
+- No Hugging Face API token is required for embeddings
+
+### 1. Clone and configure the environment
 
 ```bash
 git clone https://github.com/rxm-gupta/RAG-Groww-FAQ-Chatbot.git
 cd RAG-Groww-FAQ-Chatbot
-python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt   # Windows
-# .venv/bin/pip install -r requirements.txt       # macOS/Linux
 
-cp .env.example .env    # then fill in SUPABASE_URL, SUPABASE_KEY, GROQ_API_KEY, HF_API_KEY
+python -m venv .venv
+
+# Windows
+.venv\Scripts\python -m pip install -r requirements.txt
+
+# macOS/Linux
+# .venv/bin/python -m pip install -r requirements.txt
+
+# Create your local environment file
+cp .env.example .env
 ```
+
+Fill in the required values in `.env`, including:
+
+- `SUPABASE_URL`
+- `SUPABASE_KEY`
+- `GROQ_API_KEY`
+
+Use the environment variable names and optional settings documented in `.env.example`. Never commit `.env` or API keys to GitHub.
 
 ### 2. Supabase setup
 
-1. Create a project at supabase.com.
-2. SQL Editor → paste **all of `supabase/migrations/001_init.sql`** → Run.
-   This creates `documents`, `chunks`, `feedback` (no longer used by the app), a `vector(384)` column with an **HNSW index**, btree indexes on scheme/topic/document_type/source_id, and the `match_chunks` RPC used by retrieval.
-3. SQL Editor → paste **all of `supabase/migrations/002_exact_knn.sql`** → Run.
-   This switches `match_chunks` to an exact KNN scan so metadata filters can't silently drop the best evidence (HNSW applies WHERE filters after the approximate scan). The corpus is small, so exact search is fast and correct.
-4. Copy Project URL + **service-role key** into `.env`.
+1. Create a project at [Supabase](https://supabase.com/).
+2. Open **SQL Editor**, paste all of `supabase/migrations/001_init.sql`, and run it. This creates the required tables, vector column, indexes, and `match_chunks` retrieval RPC.
+3. Paste all of `supabase/migrations/002_exact_knn.sql` into the SQL Editor and run it. This switches retrieval to exact KNN search for the small corpus.
+4. Copy your Supabase project URL and appropriate database API key into `.env`, according to your backend configuration.
 
 ### 3. Document ingestion
 
-The knowledge base ships in `HDFC MF PDFs/`. One-time bootstrap copies files into `data/documents/` and builds the manifest (scheme, doc type, organization, official source URLs pulled from the FAQ workbook):
+The knowledge base uses official documents stored in `HDFC MF PDFs/`. The bootstrap script copies the files into `data/documents/` and builds the manifest with scheme, document type, organization, and source URL metadata.
 
 ```bash
 python scripts/bootstrap_manifest.py
 ```
 
-Then ingest everything (extract → clean → section-aware chunk → embed → upsert):
+Then ingest the documents:
 
 ```bash
-python -m ingestion.run              # all files
-python -m ingestion.run --file "SID - HDFC Small Cap Fund dated November 21 2025_0.pdf"  # one file
+# Ingest all documents
+python -m ingestion.run
+
+# Ingest one document
+python -m ingestion.run --file "SID - HDFC Small Cap Fund dated November 21 2025_0.pdf"
 ```
 
-- Chunks are **section-aware**, not blind fixed-size: headings delimit sections, long sections split at sentence boundaries with overlap, tables stay structured.
-- Every chunk carries `{scheme, topic, page_number, source_url, document_title, source_id}` metadata.
-- Re-ingesting is idempotent per `source_id`.
-- Embeddings go exclusively through the HF Inference API (384-dim). If HF is down the run fails loudly — no local fallback model exists.
+- Chunks are section-aware rather than split using only fixed character counts.
+- Long sections are split at sentence boundaries with overlap, and tables remain structured where supported.
+- Every chunk carries metadata such as scheme, topic, page number, source URL, document title, and source ID.
+- Re-ingestion is designed to be idempotent per source ID.
+- Embeddings are generated locally with `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions). The same model should be used for both ingestion and query-time embeddings so the vectors remain compatible.
+
+**Important:** If you change the embedding model, its configuration, or the vector dimension, assess compatibility with the existing Supabase vectors before re-ingesting.
 
 ### 4. Run locally
 
-```bash
-# Terminal 1 — backend
-uvicorn backend.app.main:app --port 8000
+Start the backend in Terminal 1:
 
-# Terminal 2 — frontend
-cd frontend && npm install && npm run dev    # http://localhost:3000
+```bash
+python -m uvicorn backend.app.main:app --reload --port 8000
 ```
+
+Start the frontend in Terminal 2:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the frontend at [http://localhost:3000](http://localhost:3000).
+
+The backend API documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
 ### 5. Evaluate
 
+Optionally rebuild evaluation datasets from the FAQ workbook:
+
 ```bash
-python scripts/generate_eval.py          # rebuild datasets from the FAQ workbook (optional)
+python scripts/generate_eval.py
+```
+
+Run the evaluation suite against the local backend:
+
+```bash
 python evaluation/run_evaluation.py --base-url http://localhost:8000
 ```
 
-Reports retrieval accuracy, citation accuracy, scheme identification, faithfulness length compliance, refusal accuracy, and PII blocking.
+The evaluation suite reports retrieval accuracy, citation accuracy, scheme identification, answer-length compliance, refusal accuracy, and PII blocking.
 
 ---
 
 ## Environment variables
 
-See `.env.example`. Required: `SUPABASE_URL`, `SUPABASE_KEY`, `GROQ_API_KEY`, `HF_API_KEY`.
-Key tunables: `GROQ_MODEL`, `GROQ_FALLBACK_MODEL`, `MIN_SIMILARITY_SCORE` (evidence gate), `TOP_K`, `FINAL_TOP_K`, `CORS_ORIGINS`, `CHAT_RATE_LIMIT`.
+See `.env.example` for the complete configuration.
 
-> **Note on MIN_SIMILARITY_SCORE:** the spec example suggests 0.70, but MiniLM cosine similarities for genuinely relevant chunks typically land between 0.30–0.60; a 0.70 gate rejects almost everything. The shipped default of **0.35** balances recall vs. safety and remains fully configurable.
+Core backend variables include:
+
+- `SUPABASE_URL`
+- `SUPABASE_KEY`
+- `GROQ_API_KEY`
+
+Other configuration may include `GROQ_MODEL`, `GROQ_FALLBACK_MODEL`, `MIN_SIMILARITY_SCORE`, `TOP_K`, `FINAL_TOP_K`, `CORS_ORIGINS`, `CHAT_RATE_LIMIT`, and `INGEST_TOKEN`.
+
+The application does not require `HF_API_KEY` or `HF_INFERENCE_URL` for embeddings when using the local model implementation.
+
+> **Similarity threshold:** The default `MIN_SIMILARITY_SCORE` is configurable. Tune it against the actual corpus and evaluation results; an overly high threshold can reject relevant evidence, while a low threshold can admit weak matches.
+
+---
 
 ## Deployment
 
-| Piece | Platform | Notes |
+| Component | Platform | Configuration |
 |---|---|---|
-| Frontend | **Vercel** | Root dir `frontend/`; env `NEXT_PUBLIC_API_URL=https://<render-app>.onrender.com` |
-| Backend | **Render** | Use `render.yaml` blueprint or manual: build `pip install -r requirements.txt`, start `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`; set env vars; set `CORS_ORIGINS=https://<vercel-app>.vercel.app` |
-| Database | **Supabase** | Run migration once; ingestion runs from your machine (or authenticated `POST /ingest` with `INGEST_TOKEN`) |
+| Frontend | **Vercel** | Set the project root to `frontend/` and configure `NEXT_PUBLIC_API_URL` to the public Render backend URL |
+| Backend | **Render** | Install dependencies with `pip install -r requirements.txt`; start with `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`; configure the required environment variables and allowed CORS origin |
+| Database | **Supabase** | Run the SQL migrations once; ingest documents from your machine or use the authenticated ingestion endpoint if configured |
 
-Secrets live only in platform dashboards — never in git.
+### Embedding model at deployment
+
+The backend runs `all-MiniLM-L6-v2` locally through `sentence-transformers`. The model may need to download on first startup, so the first startup can take longer. Hugging Face may serve as the public model download source, but the application does not call the Hugging Face Inference API for embedding requests.
+
+Keep secrets in the Render and Vercel environment-variable dashboards. Never commit credentials to GitHub.
+
+---
 
 ## Privacy rules
 
-- Do not enter PAN, Aadhaar, OTPs, bank details, folio numbers, phone numbers, or other personal/account information.
-- PII is detected **before** retrieval; blocked input is never sent to the embedding API, Supabase, or Groq.
-- Raw PII is never logged.
-- Chat history is not persisted server-side beyond an in-memory scheme-context session (TTL 30 min).
+- Do not enter PAN, Aadhaar, OTPs, bank details, folio numbers, phone numbers, emails, or other personal/account information.
+- PII detection runs before retrieval; blocked input is not passed to the local embedding model, Supabase, or Groq.
+- Raw PII should never be logged.
+- Chat history is not persisted server-side beyond the in-memory scheme-context session described by the application.
+
+---
 
 ## Known limitations
 
-- Answers depend on the quality/recency of supplied documents; re-ingest updated factsheets periodically (`document_date` freshness feeds reranking).
-- Rule-based intent classification favors precision over recall; unusual phrasings may route to clarification rather than refusal.
+- Answers depend on the quality and recency of the supplied documents. Re-ingest updated official documents periodically.
+- Rule-based intent classification favors precision over recall; unusual phrasing may result in clarification instead of a refusal.
 - The similarity threshold may need tuning after corpus changes.
-- Grow-specific answers rely on ingested Groww pages; if absent, the assistant says the information wasn't found rather than guessing.
+- The first backend startup may take longer while the local embedding model downloads or loads.
+- Groww-specific answers rely on ingested Groww help pages. If the relevant evidence is absent, the assistant should say the information was not found rather than guess.
+- Deployment performance depends on the available CPU and memory resources.
+
+---
 
 ## Disclaimer
 
