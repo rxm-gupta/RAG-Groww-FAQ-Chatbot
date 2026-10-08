@@ -17,4 +17,5 @@ openpyxl>=3.1
 pytest>=8.2
 requests>=2.32
 
-# Local embedding fallback lives in requirements-local.txt (heavy: pulls torch).
+
+sentence-transformers>=3.0

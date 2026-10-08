@@ -33,7 +33,7 @@ def health():
         "status": "ok",
         "app": "Groww Mutual Fund FAQ Assistant",
         "model": settings.groq_model,
-        "embedding": "all-MiniLM-L6-v2 (HF Inference API)",
+        "embedding": "all-MiniLM-L6-v2 (Local)",
     }
 
 

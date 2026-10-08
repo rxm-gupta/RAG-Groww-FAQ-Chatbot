@@ -1,57 +1,90 @@
-"""Embedding client: Hugging Face Inference API only (all-MiniLM-L6-v2, 384-dim).
+"""Document embedding using a local all-MiniLM-L6-v2 model.
 
-No local model is used or installed. If the API is unavailable, callers
-receive an exception and the application returns its standard error message.
+The same embedding model is used during ingestion and query-time
+retrieval so that document vectors and query vectors remain compatible.
 """
+
 from __future__ import annotations
 
 import logging
-import time
+from functools import lru_cache
 
-import httpx
+from sentence_transformers import SentenceTransformer
 
-from .config import EMBED_BATCH_SIZE, HF_API_KEY, HF_INFERENCE_URL
+from .config import EMBED_BATCH_SIZE
 
 logger = logging.getLogger(__name__)
 
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_DIMENSION = 384
 
-def embed_hf(texts: list[str], retries: int = 3, timeout: float = 60.0) -> list[list[float]]:
-    if not HF_API_KEY:
-        raise RuntimeError("HF_API_KEY is not set in the environment (.env)")
 
-    headers = {"Authorization": f"Bearer {HF_API_KEY}", "Content-Type": "application/json"}
-    last_error: Exception | None = None
+@lru_cache(maxsize=1)
+def get_embedding_model() -> SentenceTransformer:
+    """Load and cache the embedding model."""
+    logger.info("Loading embedding model: %s", MODEL_NAME)
+    return SentenceTransformer(MODEL_NAME)
 
-    for attempt in range(retries):
-        try:
-            resp = httpx.post(
-                HF_INFERENCE_URL,
-                json={"inputs": texts},
-                headers=headers,
-                timeout=timeout,
+
+def embed_local(
+    texts: list[str],
+    batch_size: int = EMBED_BATCH_SIZE,
+) -> list[list[float]]:
+    """Generate normalized embeddings for a list of text chunks."""
+    if not texts:
+        return []
+
+    model = get_embedding_model()
+
+    cleaned_texts = [text[:4000] for text in texts]
+
+    vectors = model.encode(
+        cleaned_texts,
+        batch_size=batch_size,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+
+    result = vectors.tolist()
+
+    for index, vector in enumerate(result):
+        if len(vector) != EMBEDDING_DIMENSION:
+            raise ValueError(
+                f"Unexpected embedding dimension for item {index}: "
+                f"{len(vector)} (expected {EMBEDDING_DIMENSION})"
             )
-            if resp.status_code == 200:
-                data = resp.json()
-                vectors = data.get("embeddings", data) if isinstance(data, dict) else data
-                if isinstance(vectors, list) and len(vectors) == len(texts):
-                    return vectors
-                raise ValueError(f"Unexpected HF response shape: {type(data)}")
-            last_error = RuntimeError(f"HF inference HTTP {resp.status_code}: {resp.text[:200]}")
-        except Exception as exc:  # noqa: BLE001
-            last_error = exc
-        logger.warning("HF inference attempt %d/%d failed: %s", attempt + 1, retries, last_error)
-        time.sleep(2 * (attempt + 1))
 
-    raise RuntimeError(f"Embedding service unavailable after {retries} attempts: {last_error}")
+    return result
 
 
 class Embedder:
+    """Batching wrapper used by the ingestion pipeline."""
+
     def __init__(self, batch_size: int = EMBED_BATCH_SIZE):
         self.batch_size = batch_size
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        out: list[list[float]] = []
-        for i in range(0, len(texts), self.batch_size):
-            batch = [t[:4000] for t in texts[i : i + self.batch_size]]
-            out.extend(embed_hf(batch))
-        return out
+        """Generate embeddings for all supplied texts."""
+        if not texts:
+            return []
+
+        output: list[list[float]] = []
+
+        for start in range(0, len(texts), self.batch_size):
+            batch = texts[start : start + self.batch_size]
+
+            logger.info(
+                "Embedding batch %d-%d of %d",
+                start + 1,
+                min(start + len(batch), len(texts)),
+                len(texts),
+            )
+
+            output.extend(
+                embed_local(
+                    batch,
+                    batch_size=self.batch_size,
+                )
+            )
+
+        return output
